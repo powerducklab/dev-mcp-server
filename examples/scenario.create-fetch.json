@@ -1,0 +1,35 @@
+{
+  "name": "create then fetch a pet",
+  "description": "Creates a pet, extracts its id, and reads it back.",
+  "stopOnFailure": true,
+  "steps": [
+    {
+      "ref": "POST /pets",
+      "name": "create",
+      "request": {
+        "values": {
+          "body": { "name": "Rex", "tag": "dog" }
+        },
+        "extract": [
+          { "name": "petId", "from": "body", "path": "$.id" }
+        ],
+        "assertions": [
+          { "name": "created", "assert": "status", "value": 201 }
+        ]
+      }
+    },
+    {
+      "ref": "GET /pets/{petId}",
+      "name": "fetch",
+      "request": {
+        "values": {
+          "path": { "petId": "{{petId}}" }
+        },
+        "assertions": [
+          { "name": "ok", "assert": "status", "value": 200 },
+          { "name": "id roundtrips", "assert": "jsonPath", "path": "$.id", "exists": true }
+        ]
+      }
+    }
+  ]
+}

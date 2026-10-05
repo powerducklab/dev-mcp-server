@@ -1,0 +1,5 @@
+{
+  "spec": "./openapi/openapi.yaml",
+  "baseUrl": "http://localhost:8080",
+  "project": "./backend"
+}
