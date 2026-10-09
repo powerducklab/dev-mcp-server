@@ -163,3 +163,25 @@ describe("scenarios", () => {
     expect(report.status).toBe("cancelled");
   });
 });
+
+it('cancels active send and contract requests through the CLI engine',async()=>{
+ const http=await import('node:http');
+ const snapshot=await store.load();
+ for(const mode of ['send','contract']) {
+  let started!:()=>void;
+  const connected=new Promise<void>(resolve=>{started=resolve;});
+  const server=http.createServer(()=>started());
+  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const address=server.address() as import('node:net').AddressInfo;
+  const controller=new AbortController();
+  try {
+   const overrides={baseUrl:`http://127.0.0.1:${address.port}`,timeoutMs:30000};
+   const running=mode==='send'
+    ? sendOne(snapshot,overrides,{operationId:'listPets'},{signal:controller.signal})
+    : runContractSuite(snapshot,overrides,{operationIds:['listPets']},{signal:controller.signal});
+   await connected;controller.abort();
+   const result:any=await running;
+   expect(mode==='send' ? result.status : result.results[0].status).toBe('error');
+  }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+ }
+});

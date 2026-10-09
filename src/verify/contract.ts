@@ -31,7 +31,8 @@ export interface ContractSuiteResult {
   version: string;
 }
 
-const VERSION = "0.1.0";
+import packageJson from "../../package.json";
+const VERSION = packageJson.version;
 
 function asStringList(value: unknown, field: string): string[] | undefined {
   if (value === undefined) return undefined;
@@ -72,26 +73,28 @@ export async function runContractSuite(
 
   const client = createClient();
   const concurrency = Math.max(1, Math.min(config.concurrency ?? 5, operations.length));
-  const queue = [...operations];
+  let nextIndex = 0;
   const results: TestResult[] = [];
   const startedAt = Date.now();
   let cancelled = false;
 
   const workers = Array.from({ length: concurrency }, async () => {
-    while (queue.length > 0) {
+    while (nextIndex < operations.length) {
       if (sink.signal?.aborted) {
         cancelled = true;
         return;
       }
-      const op = queue.shift();
+      const op = operations[nextIndex++];
       if (!op) return;
       const stepOptions: Parameters<typeof executeStep>[2] = {
         config,
         spec: snapshot.dereferenced,
       };
       if (config.variables) stepOptions.variables = config.variables;
+      if (sink.signal) stepOptions.signal = sink.signal;
       const execution = await executeStep(client, op, stepOptions);
       results.push(execution.result);
+      if (sink.signal?.aborted) cancelled = true;
       sink.report?.(results.length, operations.length, `${op.method.toUpperCase()} ${op.path}`);
     }
   });

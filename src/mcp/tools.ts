@@ -611,6 +611,7 @@ export async function executeDevTool(
     case "send_request": {
       const overrides = runOverridesFromArgs(snapshot, args);
       return sendOne(snapshot, overrides, operationLocator(args), {
+        ...(sink.signal ? {signal:sink.signal} : {}),
         values: (args.values ?? undefined) as never,
         variables: (args.variables as Record<string, string>) ?? undefined,
         assertions: (args.assertions as never[]) ?? undefined,

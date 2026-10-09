@@ -18,6 +18,7 @@ import { buildRunnerConfig, type RunOverrides } from "./config.js";
 import { locateOperation } from "./operations.js";
 
 export interface SendInput {
+  signal?: AbortSignal;
   values?: RequestValues;
   variables?: Record<string, string>;
   assertions?: DeclarativeAssertion[];
@@ -59,6 +60,8 @@ export async function sendOne(
     config,
     spec: snapshot.dereferenced,
   };
+  if (input.signal) options.signal = input.signal;
+  if (!input.variables && config.variables) options.variables = config.variables;
   const values = asRequestValues(input.values);
   if (values) options.values = values;
   if (input.variables) options.variables = input.variables;

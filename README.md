@@ -303,3 +303,17 @@ npm run build       # tsc + tsup (ESM .mjs and CJS .cjs)
 ## License
 
 MIT © Powerduck limited
+
+### Verification transport update
+
+Verification uses `@powerduck/openapi-cli` 0.2.13. Cancellation now reaches active
+single requests and contract-suite requests, in addition to ordered scenarios.
+Programmatic global variables also reach single-operation execution. Contract
+workers use an index cursor instead of repeatedly shifting the operation array.
+CLI transport behavior, including explicit errors for unsupported GraphQL/MCP
+custom proxy/TLS, applies to these tools. MCP callers provide authentication via
+request headers; programmatic callers can also supply `RunOverrides.auth`.
+
+Version 0.7.3 also makes clean installs reproducible: the lockfile uses registry
+packages instead of links into neighboring repositories, Commander matches the
+advertised Node version, and the Terser build dependency is declared explicitly.
