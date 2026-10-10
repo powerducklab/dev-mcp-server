@@ -47,7 +47,8 @@ export function startFakeBackend(): Promise<FakeBackend> {
         sendJson(response, 201, {
           id: "pet-123",
           name: body.name ?? "Rex",
-          tag: body.tag ?? "dog",
+          // The response contract restricts tags, even if the request accepts free text.
+          tag: ["dog", "cat", "bird"].includes(body.tag ?? "") ? body.tag : "dog",
         });
       });
       return;

@@ -1,3 +1,4 @@
+import { responseContractChecker } from "./response-contract.js";
 /**
  * Batch contract verification against a running backend.
  *
@@ -72,6 +73,7 @@ export async function runContractSuite(
   }
 
   const client = createClient();
+  const checkResponse = responseContractChecker(snapshot.dereferenced);
   const concurrency = Math.max(1, Math.min(config.concurrency ?? 5, operations.length));
   let nextIndex = 0;
   const results: TestResult[] = [];
@@ -93,6 +95,7 @@ export async function runContractSuite(
       if (config.variables) stepOptions.variables = config.variables;
       if (sink.signal) stepOptions.signal = sink.signal;
       const execution = await executeStep(client, op, stepOptions);
+      checkResponse(execution.result);
       results.push(execution.result);
       if (sink.signal?.aborted) cancelled = true;
       sink.report?.(results.length, operations.length, `${op.method.toUpperCase()} ${op.path}`);

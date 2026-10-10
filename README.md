@@ -329,3 +329,17 @@ verify that the same listeners still serve ordinary requests.
 ### Extended HTTP methods
 
 HTTP operation discovery includes all nine fixed OpenAPI 3.2 methods (including `trace` and `query`) and custom verbs in `additionalOperations`, such as `PROPFIND`, `REPORT`, and `CUSTOM-VERB`. Shared method helpers come from `@powerduck/openapi-parser/methods`; path metadata is not interpreted as an operation. Custom verbs must be valid HTTP tokens. Use OpenAPI 3.2 when declaring QUERY or `additionalOperations`.
+
+### Response contracts and reproducible example
+
+`run_contract_tests` and drift checks now validate declared response status,
+media type and JSON schema with Ajv, without type coercion or remote schema
+fetching. Format validation is not enabled; unsupported non-JSON response schema
+checks report a limitation instead of claiming a pass. The validator reports
+field paths (for example `/total must be number`) without embedding response data.
+
+See [the contract-total example](examples/contract-total/README.md) for a real
+loopback backend that fails on a string total and passes after returning a number.
+No model, account or Mock is involved. `MockOptions.onResponseComplete` is an
+optional observer called after a real response finishes; observer failures do not
+interrupt serving. It receives only the status code.

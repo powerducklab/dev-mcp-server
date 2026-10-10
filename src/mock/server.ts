@@ -47,6 +47,8 @@ export interface MockResponseOverride {
 }
 
 export interface MockOptions {
+  /** Called only after an actual response finishes. Must not affect serving. */
+  onResponseComplete?: (status: number) => void;
   /** Preferred port; defaults to an ephemeral port. */
   port?: number;
   /** Prefix every route is mounted under. Defaults to the first server base path. */
@@ -319,6 +321,7 @@ function createMockHandler(
   basePath: string,
   latencyMs: number,
   requests: RecordedRequest[],
+  onResponseComplete?: (status: number) => void,
 ): http.RequestListener {
   return (req, res) => {
     const cors = corsHeaders(req);
@@ -344,6 +347,7 @@ function createMockHandler(
       return;
     }
 
+    res.once("finish", () => { try { onResponseComplete?.(res.statusCode); } catch { /* observation only */ } });
     const chunks: Buffer[] = [];
     let bodyBytes = 0;
     let truncated = false;
@@ -450,7 +454,7 @@ export class MockManager {
     );
     const requests: RecordedRequest[] = [];
     const server = http.createServer(
-      createMockHandler(routes, basePath, latencyMs, requests),
+      createMockHandler(routes, basePath, latencyMs, requests, options.onResponseComplete),
     );
     const id = `mock-${randomUUID()}`;
     const explicitPort =
