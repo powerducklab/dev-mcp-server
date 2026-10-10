@@ -343,3 +343,6 @@ loopback backend that fails on a string total and passes after returning a numbe
 No model, account or Mock is involved. `MockOptions.onResponseComplete` is an
 optional observer called after a real response finishes; observer failures do not
 interrupt serving. It receives only the status code.
+
+Response schema checks skip body/media requirements for HEAD, 204 and 304
+responses; their declared status is still checked (0.7.7 regression fix).

@@ -18,9 +18,10 @@ export function responseContractChecker(document: Record<string, any>) {
     else {
       const media = (result.response.contentType ?? '').split(';')[0]!.trim().toLowerCase();
       const content = contract.content;
+      const bodyForbidden = result.method.toUpperCase() === 'HEAD' || [204, 304].includes(result.response.status);
       const definition = content?.[media] ?? content?.[media.split('/')[0] + '/*'] ?? content?.['*/*'];
-      if (content && Object.keys(content).length && !definition) error = `Response media type ${media || '(missing)'} is not declared in the contract.`;
-      else if (definition?.schema !== undefined && result.method.toUpperCase() !== "HEAD" && ![204, 304].includes(result.response.status)) {
+      if (!bodyForbidden && content && Object.keys(content).length && !definition) error = `Response media type ${media || '(missing)'} is not declared in the contract.`;
+      else if (definition?.schema !== undefined && !bodyForbidden) {
         if (media === 'application/json' || media.endsWith('+json')) {
           try {
             const body = typeof result.response.text === 'string' ? JSON.parse(result.response.text) : result.response.body;

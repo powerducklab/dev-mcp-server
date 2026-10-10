@@ -10,3 +10,10 @@ describe('response contract',()=>{
  it('rejects missing required values',()=>{const r=result({});responseContractChecker(document)(r);expect(r.status).toBe('failed');});
  it('rejects undeclared response statuses',()=>{const r=result({total:42});r.response!.status=201;responseContractChecker(document)(r);expect(r.status).toBe('failed');});
 });
+
+
+it.each([['HEAD',200],['GET',204],['GET',304]])('does not require response-body metadata for %s %s', (method,status) => {
+ const r=result(undefined);r.method=method;r.response!.status=status;r.response!.contentType='';
+ const spec={openapi:'3.1.0',paths:{'/x':{[method.toLowerCase()]:{responses:{[status]:{content:{'application/json':{schema}}}}}}}};
+ responseContractChecker(spec)(r);expect(r.status).toBe('passed');
+});
