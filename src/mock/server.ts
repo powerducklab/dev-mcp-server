@@ -356,7 +356,9 @@ function createMockHandler(
       else truncated = true;
     });
     req.on("end", () => {
-      const absolute = new URL(req.url ?? "/", "http://127.0.0.1");
+      let absolute: URL;
+      try { absolute = new URL(req.url ?? "/", "http://127.0.0.1"); }
+      catch { send(400, { "Content-Type": "application/json" }, JSON.stringify({error: "Invalid request target"})); return; }
       let pathname = absolute.pathname;
       if (basePath && pathname.startsWith(basePath)) {
         pathname = pathname.slice(basePath.length) || "/";

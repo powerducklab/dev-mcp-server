@@ -344,7 +344,9 @@ export async function startHttpServer(options: StartHttpOptions): Promise<HttpHa
   }
 
   const server = http.createServer((req, res) => {
-    const url = new URL(req.url ?? "/", `http://${host}`);
+    let url: URL;
+    try { url = new URL(req.url ?? "/", "http://127.0.0.1"); }
+    catch { sendJson(res, 400, {error: "invalid_request_target"}); return; }
 
     if (req.method === "GET" && url.pathname === "/health") {
       sendJson(res, 200, { status: "ok" });

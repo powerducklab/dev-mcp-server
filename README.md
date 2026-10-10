@@ -317,3 +317,11 @@ request headers; programmatic callers can also supply `RunOverrides.auth`.
 Version 0.7.3 also makes clean installs reproducible: the lockfile uses registry
 packages instead of links into neighboring repositories, Commander matches the
 advertised Node version, and the Terser build dependency is declared explicitly.
+
+### 0.7.4 — malformed HTTP request isolation
+
+Mock and MCP HTTP listeners return HTTP 400 for invalid request targets instead
+of allowing URL parsing errors to escape their request callbacks and terminate
+the hosting process. MCP rejects these requests before authentication without
+creating a session. Regression tests send raw malformed HTTP requests and then
+verify that the same listeners still serve ordinary requests.
