@@ -48,12 +48,12 @@ import {
   reconcileDataModel,
 } from "../datamodel/run.js";
 
-const METHOD_ENUM = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE"];
+const METHOD_PATTERN = "^[!#$%&' *+.^_`|~0-9A-Za-z-]+$".replace(" ", "");
 
 const OPERATION_LOCATOR_PROPERTIES = {
   ref: { type: "string", description: 'Operation reference, e.g. "POST /orders".' },
   operationId: { type: "string", description: "The operationId declared in the specification." },
-  method: { type: "string", enum: METHOD_ENUM },
+  method: { type: "string", pattern: METHOD_PATTERN },
   path: { type: "string", description: 'The path, e.g. "/orders/{orderId}".' },
 } as const;
 
@@ -137,7 +137,7 @@ export const devTools: Tool[] = [
       type: "object",
       properties: {
         tag: { type: "string", description: "Exact tag name." },
-        method: { type: "string", enum: METHOD_ENUM },
+        method: { type: "string", pattern: METHOD_PATTERN },
         protocol: { type: "string", description: "http, grpc, graphql, websocket, sse, or mcp." },
         secured: { type: "boolean", description: "Filter by secured operations." },
         search: { type: "string", description: "Case-insensitive substring." },

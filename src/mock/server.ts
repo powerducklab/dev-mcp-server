@@ -1,3 +1,4 @@
+import { operationEntries, isHttpMethod } from "@powerduck/openapi-parser/methods";
 /**
  * Local HTTP mock server for dependencies that are not ready yet (third-party
  * payment gateways, OTP providers, downstream services).
@@ -18,7 +19,7 @@ import { sampleFromSchema } from "@powerduck/openapi-request";
 
 type AnyObj = Record<string, unknown>;
 
-const HTTP_METHODS = ["get", "post", "put", "patch", "delete", "head", "options"];
+
 const MAX_SPEC_JSON = 2 * 1024 * 1024;
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_RECORDED_REQUESTS = 200;
@@ -201,11 +202,7 @@ export function buildRoutes(spec: AnyObj, options: MockOptions = {}): {
 
   for (const [urlPath, item] of Object.entries(paths)) {
     if (!urlPath.startsWith("/") || !item || typeof item !== "object") continue;
-    for (const [rawMethod, operation] of Object.entries(item)) {
-      const method = rawMethod.toLowerCase();
-      if (!HTTP_METHODS.includes(method) || !operation || typeof operation !== "object") {
-        continue;
-      }
+    for (const [method, operation] of operationEntries(item)) {
       const op = operation as AnyObj;
       if (op["x-protocol"] && op["x-protocol"] !== "http") continue;
       const responses = (op.responses ?? {}) as Record<string, AnyObj>;
@@ -583,7 +580,7 @@ function corsHeaders(req: http.IncomingMessage): Record<string, string> {
     "Access-Control-Allow-Origin":
       typeof req.headers.origin === "string" ? req.headers.origin : "*",
     "Access-Control-Allow-Methods":
-      "GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS",
+      ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", ...(isHttpMethod(req.headers["access-control-request-method"]) ? [String(req.headers["access-control-request-method"])] : [])].join(", "),
     "Access-Control-Allow-Headers":
       typeof requested === "string" && requested.trim()
         ? requested

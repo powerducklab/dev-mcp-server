@@ -1,3 +1,5 @@
+import { operationEntries } from "@powerduck/openapi-parser/methods";
+export { OPENAPI_METHODS as HTTP_METHODS } from "@powerduck/openapi-parser/methods";
 /**
  * Pure fact extraction over an OpenAPI document.
  *
@@ -22,16 +24,7 @@ import {
   type ServerFact,
 } from "../types.js";
 
-export const HTTP_METHODS = [
-  "get",
-  "post",
-  "put",
-  "patch",
-  "delete",
-  "head",
-  "options",
-  "trace",
-] as const;
+
 
 const IDEMPOTENT_METHODS = new Set([
   "get",
@@ -141,8 +134,7 @@ function iterateOperations(doc: Record<string, any>): OperationEntry[] {
   const entries: OperationEntry[] = [];
   for (const [path, rawPathItem] of Object.entries(paths)) {
     if (!isObject(rawPathItem)) continue;
-    for (const method of HTTP_METHODS) {
-      const operation = rawPathItem[method];
+    for (const [method, operation] of operationEntries(rawPathItem)) {
       if (!isObject(operation)) continue;
       entries.push({
         method: method.toUpperCase(),
