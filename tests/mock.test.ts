@@ -166,19 +166,19 @@ describe("mock server lifecycle", () => {
     });
     expect(preflight.status).toBe(204);
     expect(preflight.headers.get("access-control-allow-origin")).toBe(
-      "http://localhost:5173",
+      "*",
     );
     expect(preflight.headers.get("access-control-allow-headers")).toContain(
       "authorization",
     );
-    expect(preflight.headers.get("access-control-allow-credentials")).toBe("true");
+    expect(preflight.headers.get("access-control-allow-credentials")).toBeNull();
 
     const simple = await fetch(`${mock.url}/v1/pets`, {
       headers: { Origin: "http://localhost:5173" },
     });
     expect(simple.status).toBe(200);
     expect(simple.headers.get("access-control-allow-origin")).toBe(
-      "http://localhost:5173",
+      "*",
     );
 
     const recorded = manager.requests(mock.id);
@@ -255,4 +255,96 @@ describe("mock MCP tools", () => {
     )) as { stopped: boolean };
     expect(stopped.stopped).toBe(true);
   });
+});
+
+
+describe("mock resource and recording boundaries", () => {
+  it("scrubs nested JSON and query credentials before recording", async () => {
+    const manager = new MockManager();
+    try {
+      const mock = await manager.start(spec);
+      await fetch(`${mock.url}/v1/pets?access_token=query-secret&api%5Fkey=query-key&name=Rex`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: "body-secret", rows: [{ clientSecret: "nested-secret", name: "Rex" }], accessToken: "camel-secret" }),
+      });
+      const record = manager.requests(mock.id)[0]!;
+      expect(record.query).toEqual({ access_token: "***", api_key: "***", name: "Rex" });
+      expect(record.bodyJson).toEqual({ password: "***", rows: [{ clientSecret: "***", name: "Rex" }], accessToken: "***" });
+      expect(JSON.parse(record.body)).toEqual(record.bodyJson);
+      expect(record.bodyRedacted).toBe(true);
+      for (const value of ["query-secret", "query-key", "body-secret", "nested-secret", "camel-secret"]) expect(JSON.stringify(record)).not.toContain(value);
+    } finally { await manager.stopAll(); }
+  });
+
+  it("scrubs form bodies and omits malformed, opaque and truncated bodies", async () => {
+    const manager = new MockManager();
+    try {
+      const mock = await manager.start(spec);
+      for (const [type, body] of [
+        ["application/x-www-form-urlencoded", "password=hidden&password=hidden2&name=Rex"],
+        ["application/json", '{"password":"hidden"'],
+        ["text/plain", "password=hidden"],
+        ["multipart/form-data; boundary=abc", "private content"],
+        ["application/json", JSON.stringify({ name: "x".repeat(70 * 1024), password: "hidden" })],
+      ] as const) await fetch(`${mock.url}/v1/pets`, { method: "POST", headers: { "Content-Type": type }, body });
+      const records = manager.requests(mock.id);
+      expect(new URLSearchParams(records[0]!.body).get("password")).toBe("***");
+      expect(new URLSearchParams(records[0]!.body).get("name")).toBe("Rex");
+      for (const record of records.slice(1)) { expect(record.body).toBe("***"); expect(record.bodyJson).toBeUndefined(); }
+      expect(JSON.stringify(records)).not.toContain("hidden");
+    } finally { await manager.stopAll(); }
+  });
+
+  it("caps simultaneous starts at eight and releases capacity after stop", async () => {
+    const manager = new MockManager();
+    try {
+      const results = await Promise.allSettled(Array.from({ length: 12 }, () => manager.start(spec)));
+      expect(results.filter(r => r.status === "fulfilled")).toHaveLength(8);
+      expect(manager.list()).toHaveLength(8);
+      await manager.stop(manager.list()[0]!.id);
+      await manager.start(spec);
+      expect(manager.list()).toHaveLength(8);
+    } finally { await manager.stopAll(); }
+  });
+
+  it("stopAll includes pending starts and cancels outstanding latency timers", async () => {
+    const manager = new MockManager();
+    const mock = await manager.start(spec, { latencyMs: 10000 });
+    const entry = (manager as any).mocks.get(mock.id);
+    const response = fetch(`${mock.url}/v1/pets`).catch(() => null);
+    await new Promise<void>((resolve, reject) => {
+      const deadline = Date.now() + 1000;
+      const check = () => {
+        if (entry.timers.size) return resolve();
+        if (Date.now() > deadline) return reject(new Error("No latency timer"));
+        setTimeout(check, 5);
+      };
+      check();
+    });
+    const pending = manager.start(spec);
+    await manager.stopAll();
+    await pending;
+    await response;
+    expect(manager.list()).toEqual([]);
+    expect(entry.timers.size).toBe(0);
+    expect(entry.requests).toEqual([]);
+  });
+});
+
+it("bounds recording bytes independently of request count and can clear the log", async () => {
+  const manager = new MockManager();
+  try {
+    const mock = await manager.start(spec);
+    for (let i = 0; i < 40; i++) await fetch(`${mock.url}/v1/pets`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: "x".repeat(60 * 1024), i }),
+    });
+    const records = manager.requests(mock.id);
+    expect(records.length).toBeLessThan(40);
+    expect(records.reduce((bytes, record) => bytes + Buffer.byteLength(JSON.stringify(record)), 0)).toBeLessThanOrEqual(2 * 1024 * 1024);
+    manager.requests(mock.id, { clear: true });
+    expect(manager.requests(mock.id)).toEqual([]);
+    await fetch(`${mock.url}/v1/pets`);
+    expect(manager.requests(mock.id)).toHaveLength(1);
+  } finally { await manager.stopAll(); }
 });

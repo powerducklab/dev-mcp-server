@@ -103,7 +103,7 @@ When a dependency is not implemented yet (a payment gateway, an OTP provider, a 
 }
 ```
 
-Mocks never execute scripts or fetch remote references, bind to loopback only, cap bodies at 1 MB, and stop automatically when the MCP server disconnects. Use `get_mock_requests` to assert what your implementation actually sent — for example the payment callback payload.
+Mocks never execute scripts or fetch remote references and bind to loopback only. Each manager allows at most 8 running mocks. Responses are capped at 1 MB each and 8 MB total per mock. Request recording keeps at most 200 entries and 2 MB per mock: sensitive header, query, JSON and form fields are redacted before storage; opaque, malformed or truncated bodies are omitted. Field-name redaction is not a general personal-data detector. CORS permits cross-origin requests without browser credentials. Stopping a mock also cancels pending latency timers; all mocks stop when the MCP server disconnects.
 
 ### Saving regression scenarios
 

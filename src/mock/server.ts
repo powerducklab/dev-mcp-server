@@ -22,6 +22,9 @@ type AnyObj = Record<string, unknown>;
 const MAX_SPEC_JSON = 2 * 1024 * 1024;
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_RECORDED_REQUESTS = 200;
+export const MAX_MOCK_INSTANCES = 8;
+const MAX_RECORDING_BYTES = 2 * 1024 * 1024;
+const recordingSizes = new WeakMap<RecordedRequest, number>();
 const MAX_LATENCY_MS = 10_000;
 
 export interface MockRoute {
@@ -70,6 +73,7 @@ export interface RecordedRequest {
   headers: Record<string, string>;
   body: string;
   bodyJson?: unknown;
+  bodyRedacted?: boolean;
   matchedRoute: string | null;
 }
 
@@ -98,6 +102,7 @@ interface RunningMock {
   routeTable: MockRoute[];
   routes: Array<{ method: string; path: string; status: number }>;
   requests: RecordedRequest[];
+  timers: Set<ReturnType<typeof setTimeout>>;
 }
 
 /** Inlines local $ref values with cycle, depth, and budget guards. */
@@ -200,6 +205,7 @@ export function buildRoutes(spec: AnyObj, options: MockOptions = {}): {
   const overrides = options.overrides ?? {};
   const paths = spec.paths as Record<string, AnyObj>;
   const routes: MockRoute[] = [];
+  let responseBytes = 0;
 
   for (const [urlPath, item] of Object.entries(paths)) {
     if (!urlPath.startsWith("/") || !item || typeof item !== "object") continue;
@@ -253,6 +259,8 @@ export function buildRoutes(spec: AnyObj, options: MockOptions = {}): {
       if (Buffer.byteLength(body) > 1024 * 1024) {
         throw new Error(`Mock example for ${method.toUpperCase()} ${urlPath} exceeds 1 MB.`);
       }
+      responseBytes += Buffer.byteLength(body);
+      if (responseBytes > 8 * 1024 * 1024) throw new Error("Mock response examples exceed 8 MB in total.");
       routes.push({
         method: method.toUpperCase(),
         path: urlPath,
@@ -317,17 +325,53 @@ const RECORDED_HEADERS = new Set([
   "idempotency-key",
 ]);
 
+/** Redact before storing: neither IPC nor callers can recover the raw value. */
+function sensitiveKey(key: string): boolean {
+  return /password|passwd|passphrase|secret|token|authorization|cookie|credential|privatekey|apikey|accesskey|signingkey|encryptionkey|sessionid/i.test(key.replace(/[^a-z0-9]/gi, "")) || /^(pwd|key|auth|jwt|otp|pin)$/i.test(key);
+}
+function redactValue(value: unknown, depth = 0): unknown {
+  if (depth > 32) return "***";
+  if (Array.isArray(value)) return value.map(item => redactValue(item, depth + 1));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) =>
+    [key, sensitiveKey(key) ? "***" : redactValue(item, depth + 1)]));
+  return value;
+}
+function recordedBody(raw: string, media: string, truncated: boolean): Pick<RecordedRequest, "body" | "bodyJson" | "bodyRedacted"> {
+  if (!raw && !truncated) return { body: "" };
+  // Truncated/malformed/opaque payloads cannot be safely scrubbed by field name.
+  if (truncated) return { body: "***", bodyRedacted: true };
+  try {
+    if (/json/i.test(media)) {
+      const parsed = JSON.parse(raw);
+      const bodyJson = redactValue(parsed);
+      const body = JSON.stringify(bodyJson);
+      return { body, bodyJson, bodyRedacted: body !== JSON.stringify(parsed) };
+    }
+    if (/application\/x-www-form-urlencoded/i.test(media)) {
+      const fields = new URLSearchParams(raw);
+      let bodyRedacted = false;
+      for (const key of new Set(fields.keys())) if (sensitiveKey(key)) {
+        fields.set(key, "***"); bodyRedacted = true;
+      }
+      return { body: fields.toString(), bodyRedacted };
+    }
+  } catch { /* Never retain unparseable raw content. */ }
+  return { body: "***", bodyRedacted: true };
+}
+
 function createMockHandler(
   routes: MockRoute[],
   basePath: string,
   latencyMs: number,
   requests: RecordedRequest[],
+  timers: Set<ReturnType<typeof setTimeout>>,
   onResponseComplete?: (status: number) => void,
 ): http.RequestListener {
   return (req, res) => {
     const cors = corsHeaders(req);
     const send = (statusCode: number, headers: http.OutgoingHttpHeaders, chunk?: string) => {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
+        timers.delete(timer);
         // The server may have been stopped (and the socket destroyed) while an
         // artificial latency was still pending. Never write to a finished or
         // destroyed response, and never let a late timer raise an uncaught error.
@@ -339,6 +383,8 @@ function createMockHandler(
           res.destroy();
         }
       }, latencyMs);
+      timers.add(timer);
+      res.once("close", () => { clearTimeout(timer); timers.delete(timer); });
     };
 
     // Answer CORS preflights immediately and do not record them as traffic.
@@ -377,29 +423,23 @@ function createMockHandler(
         }
       }
       const rawBody = Buffer.concat(chunks).toString("utf8");
-      const body = truncated ? `${rawBody}\n…[truncated]` : rawBody;
+      chunks.length = 0;
+      const sanitizedBody = recordedBody(rawBody, headerMap["content-type"] ?? "", truncated);
       const recorded: RecordedRequest = {
         timestamp: new Date().toISOString(),
         method: req.method ?? "GET",
         path: pathname,
-        query: Object.fromEntries(absolute.searchParams.entries()),
+        query: redactValue(Object.fromEntries(absolute.searchParams.entries())) as Record<string, string>,
         headers: headerMap,
-        body,
+        ...sanitizedBody,
         matchedRoute: route ? `${route.method} ${route.path}` : null,
       };
-      if (
-        body &&
-        /json/i.test(headerMap["content-type"] ?? "")
-      ) {
-        try {
-          recorded.bodyJson = JSON.parse(body);
-        } catch {
-          // Keep the raw body when it is not valid JSON.
-        }
-      }
+      recordingSizes.set(recorded, Buffer.byteLength(JSON.stringify(recorded)));
       requests.push(recorded);
-      if (requests.length > MAX_RECORDED_REQUESTS) {
-        requests.splice(0, requests.length - MAX_RECORDED_REQUESTS);
+      // Bound retained bytes as well as count (query strings also consume space).
+      let retainedBytes = requests.reduce((sum, item) => sum + (recordingSizes.get(item) ?? 0), 0);
+      while (requests.length > MAX_RECORDED_REQUESTS || retainedBytes > MAX_RECORDING_BYTES) {
+        retainedBytes -= recordingSizes.get(requests.shift()!) ?? 0;
       }
 
       if (!route) {
@@ -442,6 +482,13 @@ export interface MockManagerOptions {
 export class MockManager {
   private readonly mocks = new Map<string, RunningMock>();
   private preferredPort: number | undefined;
+  private lifecycle: Promise<unknown> = Promise.resolve();
+
+  private enqueue<T>(action: () => Promise<T>): Promise<T> {
+    const task = this.lifecycle.then(action);
+    this.lifecycle = task.catch(() => {});
+    return task;
+  }
 
   constructor(options: MockManagerOptions = {}) {
     if (typeof options.preferredPort === "number" && options.preferredPort > 0) {
@@ -449,16 +496,26 @@ export class MockManager {
     }
   }
 
-  async start(spec: AnyObj, options: MockOptions = {}): Promise<MockInstance> {
+  start(spec: AnyObj, options: MockOptions = {}): Promise<MockInstance> {
+    return this.enqueue(() => this.startInstance(spec, options));
+  }
+
+  private async startInstance(spec: AnyObj, options: MockOptions): Promise<MockInstance> {
+    if (this.mocks.size >= MAX_MOCK_INSTANCES) throw new Error(`At most ${MAX_MOCK_INSTANCES} mock servers can run at once. Stop a server before starting another.`);
+    if (options.port !== undefined && (!Number.isInteger(options.port) || options.port < 0 || options.port > 65535)) throw new Error("Invalid mock port.");
     const { routes, basePath } = buildRoutes(spec, options);
     const latencyMs = Math.max(
       0,
       Math.min(MAX_LATENCY_MS, Math.trunc(options.latencyMs ?? 0)),
     );
     const requests: RecordedRequest[] = [];
+    const timers = new Set<ReturnType<typeof setTimeout>>();
     const server = http.createServer(
-      createMockHandler(routes, basePath, latencyMs, requests, options.onResponseComplete),
+      createMockHandler(routes, basePath, latencyMs, requests, timers, options.onResponseComplete),
     );
+    server.maxConnections = 128;
+    server.requestTimeout = 15_000;
+    server.headersTimeout = 10_000;
     const id = `mock-${randomUUID()}`;
     const explicitPort =
       typeof options.port === "number" && options.port > 0
@@ -521,23 +578,35 @@ export class MockManager {
         status: route.status,
       })),
       requests,
+      timers,
     };
     this.mocks.set(id, running);
     return this.describe(running);
   }
 
-  async stop(id: string): Promise<boolean> {
-    const entry = this.mocks.get(id);
-    if (!entry) return false;
-    this.mocks.delete(id);
-    await this.closeServer(entry.server);
-    return true;
+  stop(id: string): Promise<boolean> {
+    return this.enqueue(async () => {
+      const entry = this.mocks.get(id);
+      if (!entry) return false;
+      this.mocks.delete(id);
+      await this.closeEntry(entry);
+      return true;
+    });
   }
 
-  async stopAll(): Promise<void> {
-    const entries = [...this.mocks.values()];
-    this.mocks.clear();
-    await Promise.all(entries.map((entry) => this.closeServer(entry.server)));
+  stopAll(): Promise<void> {
+    return this.enqueue(async () => {
+      const entries = [...this.mocks.values()];
+      this.mocks.clear();
+      await Promise.all(entries.map(entry => this.closeEntry(entry)));
+    });
+  }
+
+  private async closeEntry(entry: RunningMock): Promise<void> {
+    for (const timer of entry.timers) clearTimeout(timer);
+    entry.timers.clear();
+    entry.requests.length = 0;
+    await this.closeServer(entry.server);
   }
 
   list(): MockInstance[] {
@@ -579,19 +648,17 @@ export class MockManager {
 }
 
 
-/** Permissive CORS headers so browser-based clients can call the mock directly. */
+/** Public examples may be read cross-origin, but never with browser credentials. */
 function corsHeaders(req: http.IncomingMessage): Record<string, string> {
   const requested = req.headers["access-control-request-headers"];
   return {
-    "Access-Control-Allow-Origin":
-      typeof req.headers.origin === "string" ? req.headers.origin : "*",
+    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods":
       ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", ...(isHttpMethod(req.headers["access-control-request-method"]) ? [String(req.headers["access-control-request-method"])] : [])].join(", "),
     "Access-Control-Allow-Headers":
       typeof requested === "string" && requested.trim()
         ? requested
         : "Content-Type, Authorization, X-Requested-With",
-    "Access-Control-Allow-Credentials": "true",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
