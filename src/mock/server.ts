@@ -366,6 +366,7 @@ function createMockHandler(
   requests: RecordedRequest[],
   timers: Set<ReturnType<typeof setTimeout>>,
   onResponseComplete?: (status: number) => void,
+  onRecorded?: () => void,
 ): http.RequestListener {
   return (req, res) => {
     const cors = corsHeaders(req);
@@ -442,6 +443,7 @@ function createMockHandler(
         retainedBytes -= recordingSizes.get(requests.shift()!) ?? 0;
       }
 
+      onRecorded?.();
       if (!route) {
         send(
           404,
@@ -482,6 +484,14 @@ export interface MockManagerOptions {
 export class MockManager {
   private readonly mocks = new Map<string, RunningMock>();
   private preferredPort: number | undefined;
+  private readonly listeners = new Set<() => void>();
+  onChanged(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  }
+  private changed(): void {
+    for (const listener of this.listeners) { try { listener(); } catch { /* Observation cannot break a request. */ } }
+  }
   private lifecycle: Promise<unknown> = Promise.resolve();
 
   private enqueue<T>(action: () => Promise<T>): Promise<T> {
@@ -511,7 +521,7 @@ export class MockManager {
     const requests: RecordedRequest[] = [];
     const timers = new Set<ReturnType<typeof setTimeout>>();
     const server = http.createServer(
-      createMockHandler(routes, basePath, latencyMs, requests, timers, options.onResponseComplete),
+      createMockHandler(routes, basePath, latencyMs, requests, timers, options.onResponseComplete, () => this.changed()),
     );
     server.maxConnections = 128;
     server.requestTimeout = 15_000;
@@ -581,6 +591,7 @@ export class MockManager {
       timers,
     };
     this.mocks.set(id, running);
+    this.changed();
     return this.describe(running);
   }
 
@@ -589,6 +600,7 @@ export class MockManager {
       const entry = this.mocks.get(id);
       if (!entry) return false;
       this.mocks.delete(id);
+      this.changed();
       await this.closeEntry(entry);
       return true;
     });
@@ -598,6 +610,7 @@ export class MockManager {
     return this.enqueue(async () => {
       const entries = [...this.mocks.values()];
       this.mocks.clear();
+      if(entries.length) this.changed();
       await Promise.all(entries.map(entry => this.closeEntry(entry)));
     });
   }
@@ -624,7 +637,7 @@ export class MockManager {
         ? Math.max(1, Math.min(MAX_RECORDED_REQUESTS, Math.trunc(options.limit)))
         : MAX_RECORDED_REQUESTS;
     const slice = entry.requests.slice(-limit);
-    if (options.clear) entry.requests.length = 0;
+    if (options.clear) { entry.requests.length = 0; this.changed(); }
     return slice;
   }
 

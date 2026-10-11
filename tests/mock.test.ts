@@ -348,3 +348,22 @@ it("bounds recording bytes independently of request count and can clear the log"
     expect(manager.requests(mock.id)).toHaveLength(1);
   } finally { await manager.stopAll(); }
 });
+
+it("notifies subscribers for lifecycle and recordings, and supports unsubscribe", async () => {
+  const manager = new MockManager();
+  let changes = 0;
+  const unsubscribe = manager.onChanged(() => { changes++; });
+  try {
+    const mock = await manager.start(spec);
+    expect(changes).toBe(1);
+    await (await fetch(`${mock.url}/v1/pets`)).text();
+    expect(changes).toBe(2);
+    manager.requests(mock.id, { clear: true });
+    expect(changes).toBe(3);
+    await manager.stop(mock.id);
+    expect(changes).toBe(4);
+    unsubscribe();
+    await manager.start(spec);
+    expect(changes).toBe(4);
+  } finally { unsubscribe(); await manager.stopAll(); }
+});
