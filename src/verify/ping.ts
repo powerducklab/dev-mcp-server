@@ -1,3 +1,4 @@
+import { assertTarget, type NetworkPolicy } from "./network.js";
 /**
  * Lightweight reachability probe. Unlike send_request this does not require a
  * matching operation; it confirms the local backend is up before testing.
@@ -16,6 +17,7 @@ export interface PingResult {
 export async function pingTarget(
   rawUrl: string,
   timeoutMs: number,
+  policy: NetworkPolicy = {},
 ): Promise<PingResult> {
   let url: URL;
   try {
@@ -32,6 +34,7 @@ export async function pingTarget(
     };
   }
 
+  await assertTarget(rawUrl, policy);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const startedAt = Date.now();
@@ -39,9 +42,10 @@ export async function pingTarget(
     const response = await fetch(url, {
       method: "GET",
       signal: controller.signal,
-      redirect: "follow",
+      redirect: "manual",
     });
     const contentType = response.headers.get("content-type");
+    await response.body?.cancel();
     return {
       url: rawUrl,
       reachable: true,

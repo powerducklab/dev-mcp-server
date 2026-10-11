@@ -346,3 +346,24 @@ interrupt serving. It receives only the status code.
 
 Response schema checks skip body/media requirements for HEAD, 204 and 304
 responses; their declared status is still checked (0.7.7 regression fix).
+
+### Verification network policy
+
+`--base-url` (or `baseUrl` in `powerduck.dev.json`) supplies the default target
+for verification tools; a tool's `baseUrl` still takes precedence. By default,
+verification reaches only loopback. To opt in to a remote backend, configure
+`allowHosts: ["192.168.1.20"]` or `--allow-hosts 192.168.1.20`. Remote entries
+must currently be IP literals: DNS targets are rejected until the runner can pin
+DNS resolution. Metadata/link-local addresses are always denied. Verification
+does not follow redirects or use proxies. Scenario step targets use the same
+policy. Runtime `auth` supports `none`, `bearer`, `basic`, and `apikey` and is not
+written to the project config.
+
+Bundle external OpenAPI references into the document before loading it. MCP
+verification refuses embedded Postman scripts because their additional network
+requests cannot yet be restricted; use declarative assertions or the desktop
+Debug workspace for script execution.
+
+Restricted MCP verification currently supports HTTP and SSE. GraphQL and session
+protocols are rejected until the published runner dependencies enforce the same
+redirect and target policy. Use the desktop Debug workspace for these protocols.

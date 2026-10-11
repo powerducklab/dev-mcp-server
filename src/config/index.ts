@@ -14,6 +14,7 @@ export interface DevConfig {
   spec?: string;
   /** Default base URL of the local backend under development. */
   baseUrl?: string;
+  allowHosts?: string[];
   /** Backend project root, used by future code-aware tools. */
   project?: string;
 }
@@ -35,6 +36,7 @@ function readConfigFile(filePath: string): DevConfig {
   const record = parsed as Record<string, unknown>;
   if (typeof record.spec === "string") config.spec = record.spec;
   if (typeof record.baseUrl === "string") config.baseUrl = record.baseUrl;
+  if (Array.isArray(record.allowHosts) && record.allowHosts.every(item => typeof item === "string")) config.allowHosts = record.allowHosts;
   if (typeof record.project === "string") config.project = record.project;
   return config;
 }

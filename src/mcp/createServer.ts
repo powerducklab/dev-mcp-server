@@ -28,6 +28,8 @@ import {
 } from "./resources.js";
 
 export interface CreateServerOptions {
+  defaultBaseUrl?: string;
+  allowHosts?: string[];
   name?: string;
   version?: string;
   /** Free-form usage instructions surfaced during MCP initialization. */
@@ -129,6 +131,7 @@ export function createDevMcpServer(
         store,
         sink,
         mockManager,
+        options,
       );
       return jsonText(result);
     } catch (error) {

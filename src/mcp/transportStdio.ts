@@ -15,6 +15,8 @@ export interface StdioHandle {
 
 export interface StartStdioOptions {
   specPath: string;
+  defaultBaseUrl?: string;
+  allowHosts?: string[];
   name?: string;
   version?: string;
   handleSignals?: boolean;
@@ -47,6 +49,8 @@ export async function startStdioServer(
   const restoreConsole = divertConsoleToStderr();
   const store = new SpecStore(options.specPath);
   const server = createDevMcpServer(store, {
+    ...(options.defaultBaseUrl ? { defaultBaseUrl: options.defaultBaseUrl } : {}),
+    ...(options.allowHosts ? { allowHosts: options.allowHosts } : {}),
     ...(options.name ? { name: options.name } : {}),
     ...(options.version ? { version: options.version } : {}),
     ...(typeof options.mockPort === "number" ? { mockPort: options.mockPort } : {}),

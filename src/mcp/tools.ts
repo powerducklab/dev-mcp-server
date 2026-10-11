@@ -60,7 +60,7 @@ const OPERATION_LOCATOR_PROPERTIES = {
 const TARGET_PROPERTIES = {
   baseUrl: {
     type: "string",
-    description: "Local backend base URL. Defaults to the first spec server URL.",
+    description: "Backend base URL. Defaults to --base-url/config, then the first spec server. Only loopback or configured allowHosts are permitted.",
   },
   timeoutMs: { type: "integer", minimum: 1, maximum: 600000, default: 30000 },
   headers: {
@@ -73,7 +73,14 @@ const TARGET_PROPERTIES = {
     description: "Postman-style {{name}} variables.",
     additionalProperties: { type: "string" },
   },
-  proxy: { type: "string", description: "HTTP/HTTPS proxy URL." },
+  auth: {
+    type: 'object', additionalProperties: false,
+    properties: {
+      type: { type: 'string', enum: ['none','bearer','basic','apikey'] },
+      token: { type: 'string' }, username: { type: 'string' }, password: { type: 'string' },
+      key: { type: 'string' }, value: { type: 'string' }, in: { type: 'string', enum: ['header','query'] },
+    }, required: ['type'],
+  },
 } as const;
 
 const SCENARIO_SCHEMA = {
@@ -514,10 +521,12 @@ export async function executeDevTool(
   store: SpecStore,
   sink: ProgressSink = {},
   manager: MockManager = new MockManager(),
+  defaults: { defaultBaseUrl?: string; allowHosts?: string[] } = {},
 ): Promise<unknown> {
   if (!TOOL_NAMES.has(name)) {
     throw new FactError("unknown_tool", `Unknown tool: ${name}`);
   }
+  args = { ...args, baseUrl: args.baseUrl ?? defaults.defaultBaseUrl };
   const snapshot = await store.load();
   const doc = snapshot.dereferenced;
   const raw = snapshot.document;
@@ -594,7 +603,7 @@ export async function executeDevTool(
       return hasLocator ? authRequirements(doc, operationLocator(args)) : authRequirements(doc);
     }
     case "ping_target": {
-      const overrides = runOverridesFromArgs(snapshot, args);
+      const overrides = { ...runOverridesFromArgs(snapshot, args), allowHosts: defaults.allowHosts ?? [] };
       const baseUrl = overrides.baseUrl;
       if (!baseUrl) {
         throw new FactError(
@@ -606,10 +615,10 @@ export async function executeDevTool(
         typeof args.timeoutMs === "number"
           ? positiveInteger(args.timeoutMs, "timeoutMs", 5000, 100, 60000)
           : 5000;
-      return pingTarget(baseUrl, timeoutMs);
+      return pingTarget(baseUrl, timeoutMs, overrides);
     }
     case "send_request": {
-      const overrides = runOverridesFromArgs(snapshot, args);
+      const overrides = { ...runOverridesFromArgs(snapshot, args), allowHosts: defaults.allowHosts ?? [] };
       return sendOne(snapshot, overrides, operationLocator(args), {
         ...(sink.signal ? {signal:sink.signal} : {}),
         values: (args.values ?? undefined) as never,
@@ -618,19 +627,19 @@ export async function executeDevTool(
       });
     }
     case "run_contract_tests": {
-      const overrides = runOverridesFromArgs(snapshot, args);
+      const overrides = { ...runOverridesFromArgs(snapshot, args), allowHosts: defaults.allowHosts ?? [] };
       const filter = contractFilterFromArgs(args);
       return runContractSuite(snapshot, overrides, filter, sink);
     }
     case "detect_drift": {
-      const overrides = runOverridesFromArgs(snapshot, args);
+      const overrides = { ...runOverridesFromArgs(snapshot, args), allowHosts: defaults.allowHosts ?? [] };
       const filter = contractFilterFromArgs(args);
       return detectDrift(snapshot, overrides, filter, sink);
     }
     case "validate_scenario":
       return validateScenario(snapshot, resolveScenarioArg(snapshot.path, args));
     case "run_scenario": {
-      const overrides = runOverridesFromArgs(snapshot, args);
+      const overrides = { ...runOverridesFromArgs(snapshot, args), allowHosts: defaults.allowHosts ?? [] };
       return runScenarioTool(
         snapshot,
         resolveScenarioArg(snapshot.path, args),

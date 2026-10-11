@@ -8,6 +8,7 @@
  */
 
 import fs from "node:fs";
+import { assertDocumentSafety } from "./safety.js";
 import { load as parseYaml } from "js-yaml";
 import {
   dereference,
@@ -123,6 +124,7 @@ export class SpecStore {
       throw new Error("The OpenAPI document must be a JSON or YAML object.");
     }
 
+    assertDocumentSafety(parsed);
     let document = parsed;
     const version = typeof parsed.openapi === "string" ? parsed.openapi : "";
     if (version && !/^3\./.test(version)) {

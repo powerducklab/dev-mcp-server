@@ -10,9 +10,12 @@ import {
   type AuthConfig,
   type CliConfig,
 } from "@powerduck/openapi-cli";
+import { assertDocumentSafety } from "../spec/safety.js";
 import type { SpecSnapshot } from "../spec/store.js";
 
-export interface RunOverrides {
+import { assertTarget, type NetworkPolicy } from "./network.js";
+
+export interface RunOverrides extends NetworkPolicy {
   baseUrl?: string;
   timeoutMs?: number;
   concurrency?: number;
@@ -44,11 +47,14 @@ export function buildRunnerConfig(
   snapshot: SpecSnapshot,
   overrides: RunOverrides,
 ): CliConfig {
+  assertDocumentSafety(snapshot.document, true);
   const args: Record<string, unknown> = { spec: snapshot.path };
-  if (overrides.baseUrl) args.server = overrides.baseUrl;
+  const baseUrl = resolveBaseUrl(snapshot, overrides.baseUrl);
+  if (!baseUrl) throw new Error("Provide a concrete backend base URL.");
+  args.server = baseUrl;
   if (overrides.timeoutMs) args.timeout = overrides.timeoutMs;
   if (overrides.concurrency) args.concurrency = overrides.concurrency;
-  if (overrides.proxy) args.proxy = overrides.proxy;
+  if (overrides.proxy) throw new Error("Verification proxies are not supported by the outbound target policy.");
   const header = toKeyValuePairs(overrides.headers, ":");
   if (header) args.header = header;
   const variable = toKeyValuePairs(overrides.variables, "=");
@@ -59,6 +65,15 @@ export function buildRunnerConfig(
   config.outputDir = "";
   config.failOnError = false;
   if (overrides.auth) config.auth = overrides.auth;
+  // Validate every resolved scenario/request target, including per-step URLs.
+  // Redirects must not escape the allowlist.
+  config.requester = { ...config.requester, followRedirects: false, maxRedirects: 0 };
+  config.resolveTransport = async ({ protocol, url }) => {
+    if (!['http', 'sse'].includes(protocol)) throw new Error('Restricted MCP verification currently supports HTTP and SSE only. GraphQL verification requires a transport with redirect enforcement.');
+    if (!url) throw new Error('Provide a concrete backend base URL.');
+    await assertTarget(url, overrides);
+    return {};
+  };
   return config;
 }
 
@@ -118,6 +133,22 @@ export function runOverridesFromArgs(
   }
   if (typeof args.concurrency === "number") {
     overrides.concurrency = positiveInteger(args.concurrency, "concurrency", 5, 1, 20);
+  }
+  if (args.auth !== undefined) {
+    const auth = args.auth as Record<string, unknown>;
+    if (!auth || typeof auth !== 'object' || !['none','bearer','basic','apikey'].includes(String(auth.type))) throw new Error('auth.type must be none, bearer, basic or apikey.');
+    const clean: AuthConfig = { type: auth.type as AuthConfig['type'] };
+    for (const field of ['token','username','password','key','value'] as const) {
+      if (auth[field] !== undefined) {
+        if (typeof auth[field] !== 'string') throw new Error('Authentication fields must be strings.');
+        clean[field] = auth[field];
+      }
+    }
+    if (auth.in !== undefined) {
+      if (auth.in !== 'header' && auth.in !== 'query') throw new Error('auth.in must be header or query.');
+      clean.in = auth.in;
+    }
+    overrides.auth = clean;
   }
   const headers = asStringRecord(args.headers, "headers");
   if (headers) overrides.headers = headers;

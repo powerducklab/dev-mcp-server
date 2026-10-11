@@ -16,6 +16,7 @@ interface CommonOptions {
   spec?: string;
   config?: string;
   baseUrl?: string;
+  allowHosts?: string;
   project?: string;
   mockPort?: string;
 }
@@ -58,14 +59,17 @@ async function main(): Promise<void> {
     .option("--spec <path>", "Path to the OpenAPI document (JSON or YAML).")
     .option("--config <path>", "Path to a powerduck.dev.json file.")
     .option("--base-url <url>", "Default local backend base URL.")
+    .option("--allow-hosts <hosts>", "Explicit comma-separated backend IP allowlist (DNS targets are not supported).")
     .option("--project <dir>", "Backend project root.")
     .option("--mock-port <number>", "Preferred port for the first mock server.")
     .action(async (options: CommonOptions) => {
-      const { configDir } = loadDevConfig(options.config);
+      const { configDir, config } = loadDevConfig(options.config);
       const specPath = resolveSpec(options, configDir);
       const mockPort = optionalPort(options.mockPort);
       await startStdioServer({
         specPath,
+        ...(options.baseUrl ?? config.baseUrl ? { defaultBaseUrl: options.baseUrl ?? config.baseUrl } : {}),
+        allowHosts: options.allowHosts?.split(',').map(host => host.trim()).filter(Boolean) ?? config.allowHosts ?? [],
         ...(mockPort !== undefined ? { mockPort } : {}),
       });
     });
@@ -83,11 +87,13 @@ async function main(): Promise<void> {
         ...(command.parent?.opts() as CommonOptions),
         ...subOptions,
       } as HttpOptions;
-      const { configDir } = loadDevConfig(options.config);
+      const { configDir, config } = loadDevConfig(options.config);
       const specPath = resolveSpec(options, configDir);
       const mockPort = optionalPort(options.mockPort);
       const handle = await startHttpServer({
         specStore: new SpecStore(specPath),
+        ...(options.baseUrl ?? config.baseUrl ? { defaultBaseUrl: options.baseUrl ?? config.baseUrl } : {}),
+        allowHosts: options.allowHosts?.split(',').map(host => host.trim()).filter(Boolean) ?? config.allowHosts ?? [],
         ...(options.port !== undefined ? { port: Number(options.port) } : {}),
         ...(options.host ? { host: options.host } : {}),
         ...(options.endpoint ? { endpoint: options.endpoint } : {}),
