@@ -86,7 +86,7 @@ describe("mock server lifecycle", () => {
 
     const created = await fetch(`${mock.url}/v1/pets`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Request-Id": "t-1" },
+      headers: { "Content-Type": "application/json", "X-Request-Id": "t-1", "Authorization": "Bearer secret", "Cookie": "sid=secret", "X-Api-Key": "secret", "X-Client-Secret": "secret" },
       body: JSON.stringify({ name: "Rex" }),
     });
     expect(created.status).toBe(201);
@@ -96,6 +96,8 @@ describe("mock server lifecycle", () => {
     expect(post?.matchedRoute).toBe("POST /pets");
     expect(post?.bodyJson).toEqual({ name: "Rex" });
     expect(post?.headers["x-request-id"]).toBe("t-1");
+    for (const key of ["authorization", "cookie", "x-api-key", "x-client-secret"]) expect(post?.headers[key]).toBe("***");
+    expect(JSON.stringify(post)).not.toContain("Bearer secret");
 
     const stopped = await manager.stop(mock.id);
     expect(stopped).toBe(true);
@@ -148,12 +150,11 @@ describe("mock server lifecycle", () => {
     await manager.stop(mock.id);
   });
 
-  it("advertises a LAN url and answers CORS preflight and simple requests", async () => {
+  it("does not advertise a LAN url and answers CORS preflight and simple requests", async () => {
     const mock = await manager.start(spec);
     expect(mock.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
-    if (mock.lanUrl !== null) {
-      expect(mock.lanUrl).toMatch(/^http:\/\/\d+\.\d+\.\d+\.\d+:\d+$/);
-    }
+    expect(mock.lanUrl).toBeNull();
+    expect((manager as any).mocks.get(mock.id).server.address().address).toBe("127.0.0.1");
 
     const preflight = await fetch(`${mock.url}/v1/pets`, {
       method: "OPTIONS",

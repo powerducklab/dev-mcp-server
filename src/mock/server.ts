@@ -4,7 +4,7 @@ import { operationEntries, isHttpMethod } from "@powerduck/openapi-parser/method
  * payment gateways, OTP providers, downstream services).
  *
  * The mock is deliberately conservative:
- * - listens on all interfaces (127.0.0.1 plus the LAN IP) and never executes
+ * - listens only on loopback (127.0.0.1) and never executes
  *   scripts or fetches remote refs;
  * - answers CORS preflights and allows cross-origin callers;
  * - responds with spec examples or schema-derived samples;
@@ -13,7 +13,6 @@ import { operationEntries, isHttpMethod } from "@powerduck/openapi-parser/method
  */
 
 import http from "node:http";
-import os from "node:os";
 import { randomUUID } from "node:crypto";
 import { sampleFromSchema } from "@powerduck/openapi-request";
 
@@ -77,7 +76,7 @@ export interface RecordedRequest {
 export interface MockInstance {
   id: string;
   url: string;
-  /** Same server reachable through the first non-internal LAN IPv4, if any. */
+  /** Reserved for compatibility; null while Mock is local-only. */
   lanUrl: string | null;
   basePath: string;
   routes: Array<{ method: string; path: string; status: number }>;
@@ -309,6 +308,8 @@ function matchRoute(
 
 const RECORDED_HEADERS = new Set([
   "authorization",
+  "proxy-authorization",
+  "cookie",
   "content-type",
   "accept",
   "user-agent",
@@ -370,7 +371,9 @@ function createMockHandler(
       const headerMap: Record<string, string> = {};
       for (const [key, value] of Object.entries(req.headers)) {
         if (RECORDED_HEADERS.has(key) || key.startsWith("x-")) {
-          headerMap[key] = Array.isArray(value) ? value.join(", ") : String(value ?? "");
+          headerMap[key] = /authorization|cookie|token|secret|key/i.test(key)
+            ? "***"
+            : Array.isArray(value) ? value.join(", ") : String(value ?? "");
         }
       }
       const rawBody = Buffer.concat(chunks).toString("utf8");
@@ -483,19 +486,18 @@ export class MockManager {
           error.code === "EADDRINUSE" || error.code === "EACCES";
         if (canFallback && bindError && !fallbackAttempted) {
           fallbackAttempted = true;
-          server.listen(0, "0.0.0.0", resolve);
+          server.listen(0, "127.0.0.1", resolve);
           return;
         }
         reject(error);
       });
-      server.listen(chosenPort ?? 0, "0.0.0.0", resolve);
+      server.listen(chosenPort ?? 0, "127.0.0.1", resolve);
     });
     const address = server.address();
     if (!address || typeof address === "string") {
       await this.closeServer(server);
       throw new Error("Mock server failed to bind a port.");
     }
-    const lanIp = findLanIpv4();
     const documentId =
       typeof options.documentId === "string" && options.documentId.trim()
         ? options.documentId.trim().slice(0, 200)
@@ -508,7 +510,7 @@ export class MockManager {
       id,
       server,
       url: `http://127.0.0.1:${address.port}`,
-      lanUrl: lanIp ? `http://${lanIp}:${address.port}` : null,
+      lanUrl: null, // Deliberately local-only; no unauthenticated LAN sharing.
       ...(documentId ? { documentId } : {}),
       ...(documentName ? { documentName } : {}),
       basePath,
@@ -593,15 +595,4 @@ function corsHeaders(req: http.IncomingMessage): Record<string, string> {
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
-}
-
-/** First routable LAN IPv4 address, used to advertise the mock on the network. */
-function findLanIpv4(): string | null {
-  const interfaces = os.networkInterfaces();
-  for (const addresses of Object.values(interfaces)) {
-    for (const info of addresses ?? []) {
-      if (info.family === "IPv4" && !info.internal) return info.address;
-    }
-  }
-  return null;
 }
