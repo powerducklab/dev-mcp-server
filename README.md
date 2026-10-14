@@ -367,3 +367,47 @@ Debug workspace for script execution.
 Restricted MCP verification currently supports HTTP and SSE. GraphQL and session
 protocols are rejected until the published runner dependencies enforce the same
 redirect and target policy. Use the desktop Debug workspace for these protocols.
+
+### Generate a contract from source code
+
+`scan_code_to_openapi` performs deterministic, read-only source analysis and
+returns `document` (OpenAPI 3.2), `report`, `diagnostics`, `ok`, and
+`documentValid`. It does not execute the project, use AI, or save/overwrite files.
+Partial extraction is explicitly reported; inspect unresolved gaps before using
+its output as an API contract.
+
+Configure the source boundary with `--project /absolute/backend` or `project`
+in `powerduck.dev.json` (relative to that config). Programmatic hosts use
+`projectRoot` in `createDevMcpServer`, `startStdioServer`, or `startHttpServer`.
+Without it, the specification's parent directory is the boundary. The caller's
+`directory` may choose a subdirectory but cannot escape it, including through a
+symlink. Only scan projects you trust; this is an analysis boundary, not an OS
+sandbox for malicious repositories.
+
+```json
+{"directory":"src","frameworks":["express"],"includeTests":false,"timeoutMs":60000}
+```
+
+The configured `--spec` file need not exist for these two tools; this lets an
+agent generate its first specification. Existing contract tools still require
+a readable specification. Results are returned to the connected MCP client, so
+choose a project root appropriate for that client's access.
+
+`get_code_scan_capabilities` takes no arguments and lists the supported
+frameworks and current limits. Scanning supports Express, Fastify, NestJS,
+FastAPI, Flask, Gin, Chi, Spring, ASP.NET, Axum and Laravel. It respects the
+scanner's ignored-file policy. Source extraction runs in a worker, with a
+512 MiB JS heap limit, a maximum two-minute timeout, 10,000 source files,
+2 MiB per source file, 64 MiB of indexed source and an 8 MiB result limit.
+Only one scan runs per process, across HTTP sessions. Cancellation and timeout
+terminate the worker before freeing the scan slot. Worker output never goes to
+stdio MCP framing. Progress reports are throttled.
+
+Stable error codes: `invalid_arguments`, `scan_path_denied`,
+`scan_path_unavailable`, `scan_busy`, `cancelled`, `scan_timeout`,
+`scan_result_too_large`, and `scan_failed`.
+
+Other existing capabilities already cover contract validation, live drift,
+scenarios, mock lifecycle, and data-model SQL/report generation. Automatic
+source-gap fixes, document merge/overwrite and arbitrary SQL execution are not
+exposed by the new tools; those need separate review and write semantics.

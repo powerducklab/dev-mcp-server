@@ -69,6 +69,7 @@ async function main(): Promise<void> {
       await startStdioServer({
         specPath,
         ...(options.baseUrl ?? config.baseUrl ? { defaultBaseUrl: options.baseUrl ?? config.baseUrl } : {}),
+        ...(resolveFrom(configDir, options.project ?? config.project) ? { projectRoot: resolveFrom(configDir, options.project ?? config.project)! } : {}),
         allowHosts: options.allowHosts?.split(',').map(host => host.trim()).filter(Boolean) ?? config.allowHosts ?? [],
         ...(mockPort !== undefined ? { mockPort } : {}),
       });
@@ -93,6 +94,7 @@ async function main(): Promise<void> {
       const handle = await startHttpServer({
         specStore: new SpecStore(specPath),
         ...(options.baseUrl ?? config.baseUrl ? { defaultBaseUrl: options.baseUrl ?? config.baseUrl } : {}),
+        ...(resolveFrom(configDir, options.project ?? config.project) ? { projectRoot: resolveFrom(configDir, options.project ?? config.project)! } : {}),
         allowHosts: options.allowHosts?.split(',').map(host => host.trim()).filter(Boolean) ?? config.allowHosts ?? [],
         ...(options.port !== undefined ? { port: Number(options.port) } : {}),
         ...(options.host ? { host: options.host } : {}),

@@ -28,6 +28,8 @@ import {
 } from "./resources.js";
 
 export interface CreateServerOptions {
+  /** Trusted host-configured source root. Defaults to the specification directory. */
+  projectRoot?: string;
   defaultBaseUrl?: string;
   allowHosts?: string[];
   name?: string;
@@ -48,6 +50,7 @@ const DEFAULT_INSTRUCTIONS = [
   "Call spec_overview and list_operations to orient yourself, then get_operation before writing each handler so parameters, request bodies, responses, and auth match the specification.",
   "Use ping_target, send_request, run_contract_tests, detect_drift, validate_scenario, and run_scenario to verify the implementation as you build it. detect_drift classifies missing, unreachable, and contract-violating operations in one pass.",
   "When a dependency is not implemented yet (payment, OTP, downstream services), start_mock_server returns a local base URL you can target; get_mock_requests shows what your implementation sent.",
+  "For source-first projects, call get_code_scan_capabilities and scan_code_to_openapi to generate a contract without writing files. Review diagnostics and unresolved gaps before saving the result.",
   "Call validate_spec after the specification changes. The document is re-read from disk on every request.",
 ].join(" ");
 

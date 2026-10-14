@@ -1,3 +1,5 @@
+import path from "node:path";
+import { codeScanTools, scanCapabilities, scanCode } from "../code-scan/run.js";
 /**
  * Developer MCP tools.
  *
@@ -130,6 +132,7 @@ function resolveScenarioArg(
 }
 
 export const devTools: Tool[] = [
+  ...codeScanTools,
   {
     name: "spec_overview",
     description:
@@ -521,11 +524,16 @@ export async function executeDevTool(
   store: SpecStore,
   sink: ProgressSink = {},
   manager: MockManager = new MockManager(),
-  defaults: { defaultBaseUrl?: string; allowHosts?: string[] } = {},
+  defaults: { defaultBaseUrl?: string; allowHosts?: string[]; projectRoot?: string } = {},
 ): Promise<unknown> {
   if (!TOOL_NAMES.has(name)) {
     throw new FactError("unknown_tool", `Unknown tool: ${name}`);
   }
+  if (name === "get_code_scan_capabilities") {
+    if (Object.keys(args).length) throw new FactError("invalid_arguments", "This tool takes no arguments.");
+    return scanCapabilities;
+  }
+  if (name === "scan_code_to_openapi") return scanCode(args, defaults.projectRoot ?? path.dirname(path.resolve(store.specPath)), sink);
   args = { ...args, baseUrl: args.baseUrl ?? defaults.defaultBaseUrl };
   const snapshot = await store.load();
   const doc = snapshot.dereferenced;

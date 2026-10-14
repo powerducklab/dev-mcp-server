@@ -15,7 +15,7 @@ export interface DevConfig {
   /** Default base URL of the local backend under development. */
   baseUrl?: string;
   allowHosts?: string[];
-  /** Backend project root, used by future code-aware tools. */
+  /** Source scan boundary, relative to the config file; defaults to the spec directory. */
   project?: string;
 }
 
