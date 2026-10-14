@@ -12,6 +12,8 @@ const fixturePath = fileURLToPath(
 );
 
 const EXPECTED_TOOLS = [
+  "publish_code_docs",
+  "get_code_docs_status",
   "scan_code_to_openapi",
   "get_code_scan_capabilities",
   "spec_overview",

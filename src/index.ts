@@ -106,3 +106,5 @@ export { FactError } from "./types.js";export type {
   ValidationFact,
   ValidationIssue,
 } from "./types.js";
+
+export { PublicationManager } from "./publication/manager.js";

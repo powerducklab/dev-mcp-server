@@ -1,3 +1,4 @@
+import { publicationTools, type PublicationManager } from "../publication/manager.js";
 import path from "node:path";
 import { codeScanTools, scanCapabilities, scanCode } from "../code-scan/run.js";
 /**
@@ -133,6 +134,7 @@ function resolveScenarioArg(
 
 export const devTools: Tool[] = [
   ...codeScanTools,
+  ...publicationTools,
   {
     name: "spec_overview",
     description:
@@ -524,7 +526,7 @@ export async function executeDevTool(
   store: SpecStore,
   sink: ProgressSink = {},
   manager: MockManager = new MockManager(),
-  defaults: { defaultBaseUrl?: string; allowHosts?: string[]; projectRoot?: string } = {},
+  defaults: { defaultBaseUrl?: string; allowHosts?: string[]; projectRoot?: string; publicationManager?: PublicationManager } = {},
 ): Promise<unknown> {
   if (!TOOL_NAMES.has(name)) {
     throw new FactError("unknown_tool", `Unknown tool: ${name}`);
@@ -534,6 +536,10 @@ export async function executeDevTool(
     return scanCapabilities;
   }
   if (name === "scan_code_to_openapi") return scanCode(args, defaults.projectRoot ?? path.dirname(path.resolve(store.specPath)), sink);
+  if (name === "publish_code_docs" || name === "get_code_docs_status") {
+    if (!defaults.publicationManager) throw new FactError("publication_unavailable", "This host must supply a PublicationManager or use createDevMcpServer.");
+    return name === "get_code_docs_status" ? defaults.publicationManager.status(args) : defaults.publicationManager.publish(args, defaults.projectRoot ?? path.dirname(path.resolve(store.specPath)), sink);
+  }
   args = { ...args, baseUrl: args.baseUrl ?? defaults.defaultBaseUrl };
   const snapshot = await store.load();
   const doc = snapshot.dereferenced;

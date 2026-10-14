@@ -1,6 +1,6 @@
 {
   "name": "@powerduck/dev-mcp-server",
-  "version": "0.7.13",
+  "version": "0.7.14",
   "description": "Developer-facing MCP server that gives AI coding agents accurate OpenAPI facts and runs contract/scenario tests against a local backend. Build APIs correctly, verify them immediately.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -30,7 +30,7 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "typecheck": "tsc -p tsconfig.json",
     "bundle": "tsup",
-    "build": "npm run clean && npm run typecheck && npm run bundle",
+    "build": "npm run clean && npm run typecheck && npm run bundle && node scripts/build-viewer.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "npm run build && npm run test"
@@ -72,8 +72,12 @@
     "js-yaml": "^5.4.1"
   },
   "devDependencies": {
+    "@powerduck/oas-document": "0.1.20",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.20.1",
+    "esbuild": "0.27.7",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "terser": "^5.51.2",
     "tsup": "^8.5.1",
     "tsx": "^4.19.1",

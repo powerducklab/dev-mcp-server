@@ -21,7 +21,10 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { SpecStore } from "../spec/store.js";
 import { FactError } from "../types.js";
-import { createDevMcpServer, type CreateServerOptions } from "./createServer.js";
+import {
+  createDevMcpServer,
+  type CreateServerOptions,
+} from "./createServer.js";
 
 const DEFAULT_PORT = 3333;
 const DEFAULT_HOST = "127.0.0.1";
@@ -117,7 +120,9 @@ function sendRpcError(
   sendJson(res, status, { jsonrpc: "2.0", id: null, error: { code, message } });
 }
 
-export async function startHttpServer(options: StartHttpOptions): Promise<HttpHandle> {
+export async function startHttpServer(
+  options: StartHttpOptions,
+): Promise<HttpHandle> {
   const host = options.host ?? DEFAULT_HOST;
   const port = options.port ?? DEFAULT_PORT;
   const endpoint = normalizeEndpoint(options.endpoint);
@@ -176,10 +181,10 @@ export async function startHttpServer(options: StartHttpOptions): Promise<HttpHa
       return;
     }
 
-    const mcp = createDevMcpServer(specStore, serverOptions);
-    if (sharedMockManager) {
-      mcp.onclose = async () => {};
-    }
+    const mcp = createDevMcpServer(specStore, {
+      ...serverOptions,
+      keepMocksOnClose: !!sharedMockManager,
+    });
 
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
@@ -225,7 +230,12 @@ export async function startHttpServer(options: StartHttpOptions): Promise<HttpHa
         await rollback();
       }
       if (!res.headersSent) {
-        sendRpcError(res, 500, -32603, "Failed to handle the initialize request.");
+        sendRpcError(
+          res,
+          500,
+          -32603,
+          "Failed to handle the initialize request.",
+        );
       }
       return;
     }
@@ -241,7 +251,10 @@ export async function startHttpServer(options: StartHttpOptions): Promise<HttpHa
    * Reads and JSON-parses a POST body. Returns `undefined` for an empty body.
    * Writes the response and returns `null` when the request is malformed.
    */
-  function readJsonBody(req: http.IncomingMessage, res: http.ServerResponse): Promise<unknown> {
+  function readJsonBody(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<unknown> {
     return new Promise((resolve) => {
       const chunks: Buffer[] = [];
       let size = 0;
@@ -285,7 +298,10 @@ export async function startHttpServer(options: StartHttpOptions): Promise<HttpHa
     });
   }
 
-  async function dispatch(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  async function dispatch(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
     const sessionId = readHeader(
       req.headers["mcp-session-id"] as string | string[] | undefined,
     );
@@ -345,8 +361,12 @@ export async function startHttpServer(options: StartHttpOptions): Promise<HttpHa
 
   const server = http.createServer((req, res) => {
     let url: URL;
-    try { url = new URL(req.url ?? "/", "http://127.0.0.1"); }
-    catch { sendJson(res, 400, {error: "invalid_request_target"}); return; }
+    try {
+      url = new URL(req.url ?? "/", "http://127.0.0.1");
+    } catch {
+      sendJson(res, 400, { error: "invalid_request_target" });
+      return;
+    }
 
     if (req.method === "GET" && url.pathname === "/health") {
       sendJson(res, 200, { status: "ok" });
@@ -358,7 +378,11 @@ export async function startHttpServer(options: StartHttpOptions): Promise<HttpHa
       return;
     }
 
-    if (req.method !== "POST" && req.method !== "GET" && req.method !== "DELETE") {
+    if (
+      req.method !== "POST" &&
+      req.method !== "GET" &&
+      req.method !== "DELETE"
+    ) {
       res.writeHead(405, { Allow: "POST, GET, DELETE" });
       res.end();
       return;
@@ -378,7 +402,12 @@ export async function startHttpServer(options: StartHttpOptions): Promise<HttpHa
 
     void dispatch(req, res).catch(() => {
       if (!res.headersSent) {
-        sendRpcError(res, 500, -32603, "Internal error while handling the MCP request.");
+        sendRpcError(
+          res,
+          500,
+          -32603,
+          "Internal error while handling the MCP request.",
+        );
       } else {
         res.end();
       }

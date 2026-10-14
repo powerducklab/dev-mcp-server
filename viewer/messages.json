@@ -1,0 +1,18 @@
+{
+  "en-US": ["Unable to load this document.", "Retry"],
+  "zh-CN": ["无法加载此文档。", "重试"],
+  "zh-TW": ["無法載入此文件。", "重試"],
+  "ja-JP": ["ドキュメントを読み込めません。", "再試行"],
+  "ko-KR": ["문서를 불러올 수 없습니다.", "다시 시도"],
+  "de-DE": ["Das Dokument konnte nicht geladen werden.", "Erneut versuchen"],
+  "fr-FR": ["Impossible de charger ce document.", "Réessayer"],
+  "es-ES": ["No se pudo cargar el documento.", "Reintentar"],
+  "pt-BR": ["Não foi possível carregar o documento.", "Tentar novamente"],
+  "it-IT": ["Impossibile caricare il documento.", "Riprova"],
+  "ru-RU": ["Не удалось загрузить документ.", "Повторить"],
+  "ar-SA": ["تعذر تحميل المستند.", "إعادة المحاولة"],
+  "hi-IN": ["दस्तावेज़ लोड नहीं हो सका।", "फिर प्रयास करें"],
+  "id-ID": ["Dokumen tidak dapat dimuat.", "Coba lagi"],
+  "vi-VN": ["Không thể tải tài liệu.", "Thử lại"],
+  "tr-TR": ["Belge yüklenemedi.", "Yeniden dene"]
+}

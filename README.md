@@ -411,3 +411,17 @@ Other existing capabilities already cover contract validation, live drift,
 scenarios, mock lifecycle, and data-model SQL/report generation. Automatic
 source-gap fixes, document merge/overwrite and arbitrary SQL execution are not
 exposed by the new tools; those need separate review and write semantics.
+
+### Generate a documentation link from code
+
+Ask your coding agent: “Use Powerduck to generate API documentation for this project and give me the link.”
+
+`publish_code_docs({"directory":".","target":"local"})` scans within the host-configured `--project` root and returns a `url`, `publicationId`, completeness `report`, and `diagnostics`. It uses the official `@powerduck/oas-document` viewer with locally bundled assets. No project code executes, no source files change, and no login or external upload is required. Review inferred-contract gaps before relying on the documentation.
+
+Local links bind only to `127.0.0.1` on the **MCP host machine**. They last until that MCP session ends. Repeating the call for the same directory updates the same link; refresh the page to see changes. A remote MCP host's loopback URL is not accessible from another computer. Each session supports up to 16 publications.
+
+For a shareable link, explicitly use `target: "cloud"`. The result initially has `status: "awaiting_authorization"` and an `authorizationUrl`. Open that URL in a browser on the MCP host, sign in to Powerduck Cloud, and confirm hosting. The API definition is uploaded only through that confirmation flow. Call `get_code_docs_status({"publicationId":"..."})` to receive the final documentation URL. Authorization expires after ten minutes. MCP receives no login cookies or account credentials. Do not present the authorization URL as the finished documentation link.
+
+Subsequent Cloud calls for the same directory in the same MCP session update the existing Cloud document. Cloud links remain available after MCP exits, but the association with the source project is currently session-scoped: a new session creates a new Cloud publication. Existing Cloud account quotas apply.
+
+The desktop tool catalog includes localized titles and descriptions for both tools in all 16 supported languages. The documentation renderer preserves the API's own titles and descriptions.

@@ -1,3 +1,4 @@
+import { PublicationManager } from "../publication/manager.js";
 /**
  * Builds the developer MCP server: read-only contract facts plus verification
  * against a running backend.
@@ -43,6 +44,8 @@ export interface CreateServerOptions {
    * application so UI-started and AI-started mocks appear in one list.
    */
   mockManager?: MockManager;
+  /** Host retains ownership of a shared mock manager. */
+  keepMocksOnClose?: boolean;
 }
 
 const DEFAULT_INSTRUCTIONS = [
@@ -51,6 +54,7 @@ const DEFAULT_INSTRUCTIONS = [
   "Use ping_target, send_request, run_contract_tests, detect_drift, validate_scenario, and run_scenario to verify the implementation as you build it. detect_drift classifies missing, unreachable, and contract-violating operations in one pass.",
   "When a dependency is not implemented yet (payment, OTP, downstream services), start_mock_server returns a local base URL you can target; get_mock_requests shows what your implementation sent.",
   "For source-first projects, call get_code_scan_capabilities and scan_code_to_openapi to generate a contract without writing files. Review diagnostics and unresolved gaps before saving the result.",
+  "Use publish_code_docs to scan source and obtain a local documentation URL. Cloud publication requires target cloud and user authorization; get_code_docs_status returns the final link.",
   "Call validate_spec after the specification changes. The document is re-read from disk on every request.",
 ].join(" ");
 
@@ -84,6 +88,7 @@ export function createDevMcpServer(
   store: SpecStore,
   options: CreateServerOptions = {},
 ): Server {
+  const publicationManager = new PublicationManager();
   const mockManager =
     options.mockManager ??
     new MockManager(
@@ -134,7 +139,7 @@ export function createDevMcpServer(
         store,
         sink,
         mockManager,
-        options,
+        { ...options, publicationManager },
       );
       return jsonText(result);
     } catch (error) {
@@ -175,7 +180,8 @@ export function createDevMcpServer(
   });
 
   server.onclose = async () => {
-    await mockManager.stopAll();
+    publicationManager.close();
+    if (!options.keepMocksOnClose) await mockManager.stopAll();
   };
 
   return server;
