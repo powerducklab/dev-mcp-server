@@ -1,6 +1,6 @@
 {
   "name": "@powerduck/dev-mcp-server",
-  "version": "0.7.14",
+  "version": "0.7.15",
   "description": "Developer-facing MCP server that gives AI coding agents accurate OpenAPI facts and runs contract/scenario tests against a local backend. Build APIs correctly, verify them immediately.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -64,9 +64,9 @@
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@powerduck/code-to-openapi": "0.14.6",
     "@powerduck/datamodel": "^0.2.5",
-    "@powerduck/openapi-cli": "0.2.16",
+    "@powerduck/openapi-cli": "0.2.17",
     "@powerduck/openapi-parser": "^0.3.11",
-    "@powerduck/openapi-request": "0.2.20",
+    "@powerduck/openapi-request": "0.2.21",
     "ajv": "^8.17.1",
     "commander": "^12.1.0",
     "js-yaml": "^5.4.1"
