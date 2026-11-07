@@ -367,3 +367,18 @@ it("notifies subscribers for lifecycle and recordings, and supports unsubscribe"
     expect(changes).toBe(4);
   } finally { unsubscribe(); await manager.stopAll(); }
 });
+
+it('records original paths and only strips complete base-path segments', async () => {
+ const manager=new MockManager();
+ try {
+  const mock=await manager.start({openapi:'3.0.3',info:{title:'Paths',version:'1'},paths:{'/pets':{get:{responses:{200:{description:'OK'}}}}}},{basePath:'/v1'});
+  expect((await fetch(mock.url+'/v1/pets')).status).toBe(200);
+  expect((await fetch(mock.url+'/pets')).status).toBe(200);
+  expect((await fetch(mock.url+'/v1pets')).status).toBe(404);
+  expect(manager.requests(mock.id).map(r=>({path:r.path,route:r.matchedRoute}))).toEqual([
+   {path:'/v1/pets',route:'GET /pets'},
+   {path:'/pets',route:'GET /pets'},
+   {path:'/v1pets',route:null},
+  ]);
+ } finally {await manager.stopAll();}
+});

@@ -409,7 +409,7 @@ function createMockHandler(
       try { absolute = new URL(req.url ?? "/", "http://127.0.0.1"); }
       catch { send(400, { "Content-Type": "application/json" }, JSON.stringify({error: "Invalid request target"})); return; }
       let pathname = absolute.pathname;
-      if (basePath && pathname.startsWith(basePath)) {
+      if (basePath && (pathname === basePath || pathname.startsWith(`${basePath}/`))) {
         pathname = pathname.slice(basePath.length) || "/";
       }
       const parts = pathname.split("/");
@@ -429,7 +429,7 @@ function createMockHandler(
       const recorded: RecordedRequest = {
         timestamp: new Date().toISOString(),
         method: req.method ?? "GET",
-        path: pathname,
+        path: absolute.pathname,
         query: redactValue(Object.fromEntries(absolute.searchParams.entries())) as Record<string, string>,
         headers: headerMap,
         ...sanitizedBody,
